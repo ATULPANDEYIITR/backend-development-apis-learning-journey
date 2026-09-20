@@ -1,0 +1,224 @@
+# File: openapi.yaml
+
+openapi: 3.0.3
+info:
+  title: Path and Query Parameters API
+  version: 1.0.0
+  description: >
+    Educational API demonstrating required path parameters, optional query
+    parameters, defaults, validation, filtering, and pagination.
+
+servers:
+  - url: http://localhost:8000
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /products/{product_id}:
+    get:
+      summary: Get one product
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          description: Unique product identifier.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Product found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Product not found
+        "422":
+          description: Invalid path parameter
+
+  /products:
+    get:
+      summary: List and filter products
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 30
+          description: Optional category filter.
+        - name: min_price
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0
+          description: Optional minimum price.
+        - name: max_price
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0
+          description: Optional maximum price.
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 50
+          description: Optional case-insensitive name search.
+        - name: in_stock
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Return only products with stock.
+        - name: skip
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of matching records to skip.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+          description: Maximum number of records returned.
+      responses:
+        "200":
+          description: Filtered products
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductListResponse"
+        "422":
+          description: Parameter validation failure
+
+  /categories/{category}/products:
+    get:
+      summary: List products in a category
+      parameters:
+        - name: category
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 30
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 10
+      responses:
+        "200":
+          description: Products belonging to the requested category
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+
+  /products/{product_id}/reviews:
+    get:
+      summary: Demonstrate nested path and query parameters
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        "200":
+          description: Accepted review pagination parameters
+
+components:
+  schemas:
+    Product:
+      type: object
+      required:
+        - id
+        - name
+        - category
+        - price
+        - stock
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+        category:
+          type: string
+        price:
+          type: number
+          exclusiveMinimum: 0
+        stock:
+          type: integer
+          minimum: 0
+
+    ProductListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - skip
+        - limit
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
+        total:
+          type: integer
+          minimum: 0
+        skip:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
