@@ -1,38 +1,36 @@
 /*
- * FastAPI + Pydantic Response Models
- * ==================================
+ * Substitution Ciphers
+ * ====================
  *
  * C++17 case study:
+ * Secure Message Routing and Classical Cipher Analysis
  *
- * A production-style API response layer for an e-commerce service.
- *
- * The program models:
- *   - Internal database entities
- *   - Public response DTOs
- *   - Sensitive-field filtering
- *   - Nested response structures
- *   - Response serialization
- *   - Response validation
- *   - Pagination
- *   - Error responses
- *   - Decimal-like monetary representation
- *   - Computed response fields
- *   - Performance considerations
- *
- * The C++ standard library is used exclusively.
+ * This program models a small message-processing system that:
+ *   1. Accepts messages from simulated users.
+ *   2. Validates substitution keys.
+ *   3. Encrypts and decrypts messages.
+ *   4. Supports Caesar, affine, and general substitution mechanisms.
+ *   5. Performs frequency analysis.
+ *   6. Attempts Caesar cryptanalysis.
+ *   7. Records processing metadata.
+ *   8. Demonstrates edge cases and failure handling.
  *
  * Compile:
- *   g++ -std=c++17 -O2 -Wall -Wextra -pedantic response_models_fastapi.cpp -o response_models
- *
- * Run:
- *   ./response_models
+ *   g++ -std=c++17 -O2 substitution_ciphers.cpp -o substitution_ciphers
  */
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cctype>
+#include <cmath>
+#include <exception>
 #include <iomanip>
 #include <iostream>
+#include <map>
+#include <numeric>
 #include <optional>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -40,529 +38,1011 @@
 #include <utility>
 #include <vector>
 
+using namespace std;
 
-// ============================================================================
-// 1. DOMAIN TYPES
-// ============================================================================
+namespace crypto {
 
-struct DatabaseUser {
-    int id;
-    std::string username;
-    std::string email;
-    std::string password_hash;
-    bool is_admin;
+constexpr int ALPHABET_SIZE = 26;
+const string ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+const array<double, 26> ENGLISH_FREQUENCIES = {
+    0.0812, 0.0149, 0.0271, 0.0432, 0.1202, 0.0230, 0.0203,
+    0.0592, 0.0731, 0.0010, 0.0069, 0.0398, 0.0261, 0.0695,
+    0.0768, 0.0182, 0.0011, 0.0602, 0.0628, 0.0910, 0.0288,
+    0.0111, 0.0209, 0.0017, 0.0211, 0.0007
 };
 
-
-// ============================================================================
-// 2. PUBLIC USER RESPONSE DTO
-// ============================================================================
-
-struct UserResponse {
-    int id;
-    std::string username;
-    std::string email;
-    bool is_admin;
-
-    /*
-     * A response DTO deliberately does not contain password_hash.
-     *
-     * This mirrors the architectural principle of a FastAPI response model:
-     * internal persistence data and externally visible API data should not
-     * automatically be the same structure.
-     */
+struct FrequencyResult {
+    array<size_t, 26> counts{};
+    size_t total = 0;
 };
 
-
-// ============================================================================
-// 3. ADDRESS RESPONSE
-// ============================================================================
-
-struct AddressResponse {
-    std::string street;
-    std::string city;
-    std::string state;
-    std::string postal_code;
+struct Candidate {
+    int key;
+    double score;
+    string plaintext;
 };
 
+int gcd(int a, int b) {
+    a = abs(a);
+    b = abs(b);
 
-// ============================================================================
-// 4. CUSTOMER RESPONSE
-// ============================================================================
-
-struct CustomerResponse {
-    int id;
-    std::string name;
-    std::string email;
-    AddressResponse address;
-};
-
-
-// ============================================================================
-// 5. PRODUCT RESPONSE
-// ============================================================================
-
-struct ProductResponse {
-    int id;
-    std::string name;
-
-    /*
-     * Store money as integer minor units instead of double.
-     *
-     * Example:
-     *   8499990 = ₹84,999.90
-     *
-     * This avoids many binary floating-point precision problems.
-     */
-    long long price_minor_units;
-
-    std::string currency;
-    int stock_quantity;
-};
-
-
-// ============================================================================
-// 6. RESPONSE VALIDATION ERROR
-// ============================================================================
-
-class ResponseValidationError : public std::runtime_error {
-public:
-    explicit ResponseValidationError(const std::string& message)
-        : std::runtime_error(message) {}
-};
-
-
-// ============================================================================
-// 7. API ERROR
-// ============================================================================
-
-class ApiError : public std::runtime_error {
-private:
-    int status_code_;
-
-public:
-    ApiError(int status_code, const std::string& message)
-        : std::runtime_error(message),
-          status_code_(status_code) {}
-
-    int status_code() const noexcept {
-        return status_code_;
-    }
-};
-
-
-// ============================================================================
-// 8. TRANSACTION
-// ============================================================================
-
-enum class TransactionStatus {
-    Pending,
-    Completed,
-    Failed,
-    Refunded
-};
-
-
-std::string transaction_status_to_string(TransactionStatus status) {
-    switch (status) {
-        case TransactionStatus::Pending:
-            return "pending";
-        case TransactionStatus::Completed:
-            return "completed";
-        case TransactionStatus::Failed:
-            return "failed";
-        case TransactionStatus::Refunded:
-            return "refunded";
+    while (b != 0) {
+        int remainder = a % b;
+        a = b;
+        b = remainder;
     }
 
-    throw ResponseValidationError("Unknown transaction status.");
+    return a;
 }
 
+optional<int> modularInverse(int value, int modulus) {
+    value %= modulus;
 
-struct TransactionResponse {
-    int id;
-    long long amount_minor_units;
-    std::string currency;
-    TransactionStatus status;
-};
-
-
-// ============================================================================
-// 9. PAGINATION
-// ============================================================================
-
-struct PaginationMeta {
-    int page;
-    int page_size;
-    int total;
-};
-
-
-struct PaginatedUsersResponse {
-    std::vector<UserResponse> items;
-    PaginationMeta meta;
-};
-
-
-// ============================================================================
-// 10. RESPONSE ENVELOPE
-// ============================================================================
-
-template <typename T>
-struct ApiResponse {
-    bool success;
-    std::string message;
-    T data;
-};
-
-
-// ============================================================================
-// 11. SERIALIZATION HELPERS
-// ============================================================================
-
-std::string escape_json(const std::string& input) {
-    std::ostringstream output;
-
-    for (char character : input) {
-        switch (character) {
-            case '"':
-                output << "\\\"";
-                break;
-            case '\\':
-                output << "\\\\";
-                break;
-            case '\n':
-                output << "\\n";
-                break;
-            case '\r':
-                output << "\\r";
-                break;
-            case '\t':
-                output << "\\t";
-                break;
-            default:
-                output << character;
-                break;
-        }
+    if (value < 0) {
+        value += modulus;
     }
 
-    return output.str();
-}
+    int oldR = value;
+    int r = modulus;
+    int oldS = 1;
+    int s = 0;
 
+    while (r != 0) {
+        int quotient = oldR / r;
 
-std::string json_string(const std::string& value) {
-    return "\"" + escape_json(value) + "\"";
-}
+        int nextR = oldR - quotient * r;
+        oldR = r;
+        r = nextR;
 
-
-std::string bool_json(bool value) {
-    return value ? "true" : "false";
-}
-
-
-std::string format_money(long long minor_units) {
-    const bool negative = minor_units < 0;
-    const long long absolute_value =
-        negative ? -minor_units : minor_units;
-
-    const long long major = absolute_value / 100;
-    const long long minor = absolute_value % 100;
-
-    std::ostringstream output;
-
-    if (negative) {
-        output << "-";
+        int nextS = oldS - quotient * s;
+        oldS = s;
+        s = nextS;
     }
 
-    output << major
-           << "."
-           << std::setw(2)
-           << std::setfill('0')
-           << minor;
+    if (oldR != 1) {
+        return nullopt;
+    }
 
-    return output.str();
+    int result = oldS % modulus;
+
+    if (result < 0) {
+        result += modulus;
+    }
+
+    return result;
 }
 
-
-// ============================================================================
-// 12. INTERNAL TO PUBLIC MAPPING
-// ============================================================================
-
-UserResponse to_public_user(const DatabaseUser& user) {
-    /*
-     * Only explicitly selected public fields cross the API boundary.
-     *
-     * password_hash is never copied into UserResponse.
-     */
-    return UserResponse{
-        user.id,
-        user.username,
-        user.email,
-        user.is_admin
-    };
+bool isAsciiLetter(char character) {
+    return std::isalpha(static_cast<unsigned char>(character)) != 0
+           && std::toupper(static_cast<unsigned char>(character)) >= 'A'
+           && std::toupper(static_cast<unsigned char>(character)) <= 'Z';
 }
 
-
-// ============================================================================
-// 13. USER RESPONSE SERIALIZER
-// ============================================================================
-
-std::string serialize_user(const UserResponse& user) {
-    std::ostringstream output;
-
-    output << "{"
-           << "\"id\":" << user.id << ","
-           << "\"username\":" << json_string(user.username) << ","
-           << "\"email\":" << json_string(user.email) << ","
-           << "\"isAdmin\":" << bool_json(user.is_admin)
-           << "}";
-
-    return output.str();
-}
-
-
-// ============================================================================
-// 14. ADDRESS SERIALIZATION
-// ============================================================================
-
-std::string serialize_address(const AddressResponse& address) {
-    std::ostringstream output;
-
-    output << "{"
-           << "\"street\":" << json_string(address.street) << ","
-           << "\"city\":" << json_string(address.city) << ","
-           << "\"state\":" << json_string(address.state) << ","
-           << "\"postalCode\":" << json_string(address.postal_code)
-           << "}";
-
-    return output.str();
-}
-
-
-// ============================================================================
-// 15. CUSTOMER SERIALIZATION
-// ============================================================================
-
-std::string serialize_customer(const CustomerResponse& customer) {
-    std::ostringstream output;
-
-    output << "{"
-           << "\"id\":" << customer.id << ","
-           << "\"name\":" << json_string(customer.name) << ","
-           << "\"email\":" << json_string(customer.email) << ","
-           << "\"address\":" << serialize_address(customer.address)
-           << "}";
-
-    return output.str();
-}
-
-
-// ============================================================================
-// 16. PRODUCT AVAILABILITY
-// ============================================================================
-
-std::string availability_for(int stock_quantity) {
-    if (stock_quantity < 0) {
-        throw ResponseValidationError(
-            "Stock quantity cannot be negative."
-        );
-    }
-
-    if (stock_quantity == 0) {
-        return "out_of_stock";
-    }
-
-    if (stock_quantity < 10) {
-        return "low_stock";
-    }
-
-    return "available";
-}
-
-
-// ============================================================================
-// 17. PRODUCT SERIALIZATION
-// ============================================================================
-
-std::string serialize_product(const ProductResponse& product) {
-    if (product.stock_quantity < 0) {
-        throw ResponseValidationError(
-            "Cannot serialize product with negative stock."
-        );
-    }
-
-    std::ostringstream output;
-
-    output << "{"
-           << "\"id\":" << product.id << ","
-           << "\"name\":" << json_string(product.name) << ","
-           << "\"price\":" << json_string(
-                  format_money(product.price_minor_units)
-              ) << ","
-           << "\"currency\":" << json_string(product.currency) << ","
-           << "\"stockQuantity\":" << product.stock_quantity << ","
-           << "\"availability\":"
-           << json_string(
-                  availability_for(product.stock_quantity)
-              )
-           << "}";
-
-    return output.str();
-}
-
-
-// ============================================================================
-// 18. TRANSACTION VALIDATION
-// ============================================================================
-
-void validate_transaction(const TransactionResponse& transaction) {
-    if (transaction.id <= 0) {
-        throw ResponseValidationError(
-            "Transaction ID must be positive."
-        );
-    }
-
-    if (transaction.amount_minor_units < 0) {
-        throw ResponseValidationError(
-            "Transaction amount cannot be negative."
-        );
-    }
-
-    if (transaction.currency.empty()) {
-        throw ResponseValidationError(
-            "Transaction currency cannot be empty."
-        );
-
-    }
-
-    switch (transaction.status) {
-        case TransactionStatus::Pending:
-        case TransactionStatus::Completed:
-        case TransactionStatus::Failed:
-        case TransactionStatus::Refunded:
-            break;
-
-        default:
-            throw ResponseValidationError(
-                "Transaction status is invalid."
-            );
-    }
-}
-
-
-// ============================================================================
-// 19. TRANSACTION SERIALIZATION
-// ============================================================================
-
-std::string serialize_transaction(
-    const TransactionResponse& transaction
-) {
-    validate_transaction(transaction);
-
-    std::ostringstream output;
-
-    output << "{"
-           << "\"id\":" << transaction.id << ","
-           << "\"amount\":"
-           << json_string(
-                  format_money(transaction.amount_minor_units)
-              )
-           << ","
-           << "\"currency\":"
-           << json_string(transaction.currency)
-           << ","
-           << "\"status\":"
-           << json_string(
-                  transaction_status_to_string(transaction.status)
-              )
-           << "}";
-
-    return output.str();
-}
-
-
-// ============================================================================
-// 20. USER LIST SERIALIZATION
-// ============================================================================
-
-std::string serialize_user_list(
-    const std::vector<UserResponse>& users
-) {
-    std::ostringstream output;
-
-    output << "[";
-
-    for (std::size_t index = 0; index < users.size(); ++index) {
-        if (index > 0) {
-            output << ",";
-        }
-
-        output << serialize_user(users[index]);
-    }
-
-    output << "]";
-
-    return output.str();
-}
-
-
-// ============================================================================
-// 21. PAGINATION VALIDATION
-// ============================================================================
-
-void validate_pagination(
-    int page,
-    int page_size,
-    int total
-) {
-    if (page < 1) {
-        throw ApiError(
-            400,
-            "Page must be greater than or equal to 1."
-        );
-    }
-
-    if (page_size < 1 || page_size > 100) {
-        throw ApiError(
-            400,
-            "Page size must be between 1 and 100."
-        );
-    }
-
-    if (total < 0) {
-        throw ApiError(
-            500,
-            "Total cannot be negative."
-        );
-    }
-}
-
-
-// ============================================================================
-// 22. PAGINATED USER QUERY
-// ============================================================================
-
-PaginatedUsersResponse paginate_users(
-    const std::vector<UserResponse>& users,
-    int page,
-    int page_size
-) {
-    const int total = static_cast<int>(users.size());
-
-    validate_pagination(
-        page,
-        page_size,
-        total
+int letterToNumber(char character) {
+    char upper = static_cast<char>(
+        std::toupper(static_cast<unsigned char>(character))
     );
 
-    const std::size_t start =
-        static_cast<std::size_t>(
-            (page - 1) * page_size
+    if (upper < 'A' || upper > 'Z') {
+        throw invalid_argument("Expected an English alphabetic character.");
+    }
+
+    return upper - 'A';
+}
+
+char numberToLetter(int number) {
+    if (number < 0 || number >= ALPHABET_SIZE) {
+        throw invalid_argument("Letter number must be in [0, 25].");
+    }
+
+    return static_cast<char>('A' + number);
+}
+
+char preserveCase(char source, char replacement) {
+    if (std::islower(static_cast<unsigned char>(source))) {
+        return static_cast<char>(
+            std::tolower(static_cast<unsigned char>(replacement))
+        );
+    }
+
+    return replacement;
+}
+
+string caesarEncrypt(const string& text, int shift) {
+    string result;
+    result.reserve(text.size());
+
+    int normalizedShift = ((shift % 26) + 26) % 26;
+
+    for (char character : text) {
+        if (!isAsciiLetter(character)) {
+            result.push_back(character);
+            continue;
+        }
+
+        int plaintextNumber = letterToNumber(character);
+        int ciphertextNumber =
+            (plaintextNumber + normalizedShift) % 26;
+
+        result.push_back(
+            preserveCase(
+                character,
+                numberToLetter(ciphertextNumber)
+            )
+        );
+    }
+
+    return result;
+}
+
+string caesarDecrypt(const string& text, int shift) {
+    return caesarEncrypt(text, -shift);
+}
+
+void validateSubstitutionKey(const string& key) {
+    if (key.size() != ALPHABET_SIZE) {
+        throw invalid_argument(
+            "Substitution key must contain exactly 26 letters."
+        );
+    }
+
+    array<bool, 26> seen{};
+
+    for (char character : key) {
+        char upper = static_cast<char>(
+            std::toupper(static_cast<unsigned char>(character))
         );
 
-    std::vector<UserResponse> selected;
+        if (upper < 'A' || upper > 'Z') {
+            throw invalid_argument(
+                "Substitution key may contain only A-Z."
+            );
+        }
 
-    if (start < users.size()) {
-        const std::size_t end =
-            std::min(
-                start + static_cast<std::size_t
+        int index = upper - 'A';
+
+        if (seen[index]) {
+            throw invalid_argument(
+                "Substitution key contains duplicate letters."
+            );
+        }
+
+        seen[index] = true;
+    }
+}
+
+class SubstitutionCipher {
+private:
+    string key_;
+    array<char, 26> encryptionMap_{};
+    array<char, 26> decryptionMap_{};
+
+public:
+    explicit SubstitutionCipher(string key) {
+        for (char& character : key) {
+            character = static_cast<char>(
+                std::toupper(static_cast<unsigned char>(character))
+            );
+        }
+
+        validateSubstitutionKey(key);
+
+        key_ = std::move(key);
+
+        for (int i = 0; i < 26; ++i) {
+            encryptionMap_[i] = key_[i];
+            decryptionMap_[key_[i] - 'A'] =
+                static_cast<char>('A' + i);
+        }
+    }
+
+    const string& key() const {
+        return key_;
+    }
+
+    string encrypt(const string& plaintext) const {
+        string result;
+        result.reserve(plaintext.size());
+
+        for (char character : plaintext) {
+            if (!isAsciiLetter(character)) {
+                result.push_back(character);
+                continue;
+            }
+
+            int index = letterToNumber(character);
+            char replacement = encryptionMap_[index];
+
+            result.push_back(
+                preserveCase(character, replacement)
+            );
+        }
+
+        return result;
+    }
+
+    string decrypt(const string& ciphertext) const {
+        string result;
+        result.reserve(ciphertext.size());
+
+        for (char character : ciphertext) {
+            if (!isAsciiLetter(character)) {
+                result.push_back(character);
+                continue;
+            }
+
+            int index = letterToNumber(character);
+            char replacement = decryptionMap_[index];
+
+            result.push_back(
+                preserveCase(character, replacement)
+            );
+        }
+
+        return result;
+    }
+};
+
+string atbash(const string& text) {
+    string result;
+    result.reserve(text.size());
+
+    for (char character : text) {
+        if (!isAsciiLetter(character)) {
+            result.push_back(character);
+            continue;
+        }
+
+        int value = letterToNumber(character);
+        char replacement = numberToLetter(25 - value);
+
+        result.push_back(
+            preserveCase(character, replacement)
+        );
+    }
+
+    return result;
+}
+
+string affineEncrypt(
+    const string& text,
+    int a,
+    int b
+) {
+    if (gcd(a, 26) != 1) {
+        throw invalid_argument(
+            "Affine multiplier a must be coprime with 26."
+        );
+    }
+
+    string result;
+    result.reserve(text.size());
+
+    for (char character : text) {
+        if (!isAsciiLetter(character)) {
+            result.push_back(character);
+            continue;
+        }
+
+        int p = letterToNumber(character);
+        int c = ((a * p + b) % 26 + 26) % 26;
+
+        result.push_back(
+            preserveCase(character, numberToLetter(c))
+        );
+    }
+
+    return result;
+}
+
+string affineDecrypt(
+    const string& text,
+    int a,
+    int b
+) {
+    optional<int> inverseA = modularInverse(a, 26);
+
+    if (!inverseA.has_value()) {
+        throw invalid_argument(
+            "Affine multiplier has no modular inverse."
+        );
+    }
+
+    string result;
+    result.reserve(text.size());
+
+    for (char character : text) {
+        if (!isAsciiLetter(character)) {
+            result.push_back(character);
+            continue;
+        }
+
+        int c = letterToNumber(character);
+        int p = (
+            (*inverseA * (c - b)) % 26 + 26
+        ) % 26;
+
+        result.push_back(
+            preserveCase(character, numberToLetter(p))
+        );
+    }
+
+    return result;
+}
+
+string keywordSubstitutionKey(const string& keyword) {
+    array<bool, 26> used{};
+    string key;
+
+    for (char character : keyword) {
+        if (!isAsciiLetter(character)) {
+            continue;
+        }
+
+        int index = letterToNumber(character);
+
+        if (!used[index]) {
+            used[index] = true;
+            key.push_back(static_cast<char>('A' + index));
+        }
+    }
+
+    for (char character : ALPHABET) {
+        int index = character - 'A';
+
+        if (!used[index]) {
+            key.push_back(character);
+        }
+    }
+
+    return key;
+}
+
+FrequencyResult frequencyAnalysis(const string& text) {
+    FrequencyResult result;
+
+    for (char character : text) {
+        if (!isAsciiLetter(character)) {
+            continue;
+        }
+
+        int index = letterToNumber(character);
+        ++result.counts[index];
+        ++result.total;
+    }
+
+    return result;
+}
+
+double chiSquaredScore(const string& text) {
+    FrequencyResult frequencies = frequencyAnalysis(text);
+
+    if (frequencies.total == 0) {
+        return numeric_limits<double>::infinity();
+    }
+
+    double score = 0.0;
+
+    for (int i = 0; i < 26; ++i) {
+        double expected =
+            ENGLISH_FREQUENCIES[i] * frequencies.total;
+
+        double observed =
+            static_cast<double>(frequencies.counts[i]);
+
+        if (expected > 0.0) {
+            double difference = observed - expected;
+            score += (difference * difference) / expected;
+        }
+    }
+
+    return score;
+}
+
+vector<Candidate> breakCaesar(const string& ciphertext) {
+    vector<Candidate> candidates;
+
+    for (int key = 0; key < 26; ++key) {
+        string plaintext = caesarDecrypt(ciphertext, key);
+
+        candidates.push_back({
+            key,
+            chiSquaredScore(plaintext),
+            plaintext
+        });
+    }
+
+    sort(
+        candidates.begin(),
+        candidates.end(),
+        [](const Candidate& left, const Candidate& right) {
+            return left.score < right.score;
+        }
+    );
+
+    return candidates;
+}
+
+double indexOfCoincidence(const string& text) {
+    FrequencyResult frequencies = frequencyAnalysis(text);
+
+    if (frequencies.total < 2) {
+        return 0.0;
+    }
+
+    double numerator = 0.0;
+
+    for (size_t count : frequencies.counts) {
+        numerator +=
+            static_cast<double>(count) *
+            static_cast<double>(count - 1);
+    }
+
+    double denominator =
+        static_cast<double>(frequencies.total) *
+        static_cast<double>(frequencies.total - 1);
+
+    return numerator / denominator;
+}
+
+class MessageRouter {
+private:
+    struct MessageRecord {
+        string sender;
+        string plaintext;
+        string ciphertext;
+        size_t characterCount;
+        double processingMilliseconds;
+    };
+
+    vector<MessageRecord> records_;
+
+public:
+    void processMessage(
+        const string& sender,
+        const string& plaintext,
+        const SubstitutionCipher& cipher
+    ) {
+        auto start = chrono::high_resolution_clock::now();
+
+        string ciphertext = cipher.encrypt(plaintext);
+
+        auto end = chrono::high_resolution_clock::now();
+
+        double milliseconds =
+            chrono::duration<double, milli>(
+                end - start
+            ).count();
+
+        records_.push_back({
+            sender,
+            plaintext,
+            ciphertext,
+            plaintext.size(),
+            milliseconds
+        });
+    }
+
+    void printReport() const {
+        cout << "\nMESSAGE ROUTER REPORT\n";
+        cout << string(78, '-') << '\n';
+
+        for (const auto& record : records_) {
+            cout << "Sender       : " << record.sender << '\n';
+            cout << "Characters   : " << record.characterCount << '\n';
+            cout << "Plaintext    : " << record.plaintext << '\n';
+            cout << "Ciphertext   : " << record.ciphertext << '\n';
+            cout << fixed << setprecision(6);
+            cout << "Time         : "
+                 << record.processingMilliseconds
+                 << " ms\n";
+            cout << string(78, '-') << '\n';
+        }
+    }
+
+    size_t size() const {
+        return records_.size();
+    }
+};
+
+void printFrequencyTable(const string& text) {
+    FrequencyResult result = frequencyAnalysis(text);
+
+    cout << "\nFrequency table:\n";
+
+    for (int i = 0; i < 26; ++i) {
+        if (result.counts[i] == 0) {
+            continue;
+        }
+
+        double percentage =
+            100.0 * result.counts[i] /
+            static_cast<double>(result.total);
+
+        cout << static_cast<char>('A' + i)
+             << ": "
+             << result.counts[i]
+             << " ("
+             << fixed << setprecision(2)
+             << percentage
+             << "%)\n";
+    }
+}
+
+string makeLargeMessage(size_t repetitions) {
+    const string sentence =
+        "Substitution ciphers replace plaintext symbols using "
+        "a deterministic mapping while preserving statistical "
+        "properties that can help cryptanalysis. ";
+
+    string result;
+
+    for (size_t i = 0; i < repetitions; ++i) {
+        result += sentence;
+    }
+
+    return result;
+}
+
+void testCaesar() {
+    cout << "\n1. CAESAR CIPHER\n";
+    cout << string(78, '=') << '\n';
+
+    string plaintext = "Attack at Dawn!";
+    int shift = 3;
+
+    string ciphertext = caesarEncrypt(plaintext, shift);
+    string recovered = caesarDecrypt(ciphertext, shift);
+
+    cout << "Plaintext : " << plaintext << '\n';
+    cout << "Ciphertext: " << ciphertext << '\n';
+    cout << "Recovered : " << recovered << '\n';
+
+    if (recovered != plaintext) {
+        throw runtime_error("Caesar round-trip test failed.");
+    }
+}
+
+void testGeneralSubstitution() {
+    cout << "\n2. GENERAL SUBSTITUTION\n";
+    cout << string(78, '=') << '\n';
+
+    const string key = "QWERTYUIOPASDFGHJKLZXCVBNM";
+
+    SubstitutionCipher cipher(key);
+
+    string plaintext =
+        "The quick brown fox jumps over the lazy dog.";
+
+    string ciphertext = cipher.encrypt(plaintext);
+    string recovered = cipher.decrypt(ciphertext);
+
+    cout << "Key       : " << key << '\n';
+    cout << "Plaintext : " << plaintext << '\n';
+    cout << "Ciphertext: " << ciphertext << '\n';
+    cout << "Recovered : " << recovered << '\n';
+
+    if (recovered != plaintext) {
+        throw runtime_error(
+            "General substitution round-trip failed."
+        );
+    }
+}
+
+void testAffine() {
+    cout << "\n3. AFFINE CIPHER\n";
+    cout << string(78, '=') << '\n';
+
+    const string plaintext =
+        "Affine encryption uses modular arithmetic.";
+
+    const int a = 5;
+    const int b = 8;
+
+    string ciphertext =
+        affineEncrypt(plaintext, a, b);
+
+    string recovered =
+        affineDecrypt(ciphertext, a, b);
+
+    cout << "Parameters: a=" << a << ", b=" << b << '\n';
+    cout << "Plaintext : " << plaintext << '\n';
+    cout << "Ciphertext: " << ciphertext << '\n';
+    cout << "Recovered : " << recovered << '\n';
+
+    if (recovered != plaintext) {
+        throw runtime_error(
+            "Affine round-trip test failed."
+        );
+    }
+}
+
+void testAtbash() {
+    cout << "\n4. ATBASH\n";
+    cout << string(78, '=') << '\n';
+
+    const string plaintext =
+        "Substitution ciphers";
+
+    const string ciphertext = atbash(plaintext);
+    const string recovered = atbash(ciphertext);
+
+    cout << "Plaintext : " << plaintext << '\n';
+    cout << "Ciphertext: " << ciphertext << '\n';
+    cout << "Recovered : " << recovered << '\n';
+
+    if (recovered != plaintext) {
+        throw runtime_error("Atbash round-trip failed.");
+    }
+}
+
+void testKeywordSubstitution() {
+    cout << "\n5. KEYWORD SUBSTITUTION\n";
+    cout << string(78, '=') << '\n';
+
+    const string keyword = "CRYPTOGRAPHY";
+    const string key =
+        keywordSubstitutionKey(keyword);
+
+    SubstitutionCipher cipher(key);
+
+    const string plaintext =
+        "Protect important messages.";
+
+    const string ciphertext =
+        cipher.encrypt(plaintext);
+
+    const string recovered =
+        cipher.decrypt(ciphertext);
+
+    cout << "Keyword   : " << keyword << '\n';
+    cout << "Key       : " << key << '\n';
+    cout << "Plaintext : " << plaintext << '\n';
+    cout << "Ciphertext: " << ciphertext << '\n';
+    cout << "Recovered : " << recovered << '\n';
+}
+
+void testCryptanalysis() {
+    cout << "\n6. CAESAR CRYPTANALYSIS\n";
+    cout << string(78, '=') << '\n';
+
+    const int hiddenKey = 17;
+
+    const string plaintext =
+        "Cryptography protects information by transforming readable "
+        "data into a representation that unauthorized readers should "
+        "not understand.";
+
+    const string ciphertext =
+        caesarEncrypt(plaintext, hiddenKey);
+
+    cout << "Ciphertext:\n" << ciphertext << "\n\n";
+
+    vector<Candidate> candidates =
+        breakCaesar(ciphertext);
+
+    cout << "Top candidate keys:\n";
+
+    size_t limit = min<size_t>(5, candidates.size());
+
+    for (size_t i = 0; i < limit; ++i) {
+        const auto& candidate = candidates[i];
+
+        cout << "key="
+             << setw(2)
+             << candidate.key
+             << " score="
+             << setw(10)
+             << fixed
+             << setprecision(2)
+             << candidate.score
+             << " text="
+             << candidate.plaintext.substr(0, 90)
+             << '\n';
+    }
+
+    cout << "\nActual key: " << hiddenKey << '\n';
+}
+
+void testFrequencyAnalysis() {
+    cout << "\n7. FREQUENCY ANALYSIS\n";
+    cout << string(78, '=') << '\n';
+
+    const string text =
+        "The quick brown fox jumps over the lazy dog. "
+        "The quick brown fox jumps over the lazy dog.";
+
+    printFrequencyTable(text);
+
+    cout << "\nIndex of coincidence: "
+         << fixed
+         << setprecision(5)
+         << indexOfCoincidence(text)
+         << '\n';
+}
+
+void demonstrateFailureConditions() {
+    cout << "\n8. FAILURE CONDITIONS AND VALIDATION\n";
+    cout << string(78, '=') << '\n';
+
+    vector<string> invalidKeys = {
+        "ABC",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "ABCDEFGHIJKLMNOPQRSTUVWXY1",
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZABC"
+    };
+
+    for (const string& invalidKey : invalidKeys) {
+        try {
+            SubstitutionCipher cipher(invalidKey);
+            cout << "Unexpectedly accepted key: "
+                 << invalidKey << '\n';
+        }
+        catch (const exception& error) {
+            cout << "Rejected invalid key \""
+                 << invalidKey
+                 << "\": "
+                 << error.what()
+                 << '\n';
+        }
+    }
+
+    try {
+        affineEncrypt("HELLO", 13, 5);
+        cout << "Unexpectedly accepted invalid affine key.\n";
+    }
+    catch (const exception& error) {
+        cout << "Rejected invalid affine parameters: "
+             << error.what()
+             << '\n';
+    }
+}
+
+void demonstrateMessageRouter() {
+    cout << "\n9. INDUSTRY-STYLE MESSAGE ROUTER CASE STUDY\n";
+    cout << string(78, '=') << '\n';
+
+    /*
+     * Architecture:
+     *
+     * MessageRouter owns message records.
+     * SubstitutionCipher owns the validated key and mapping.
+     * The routing layer does not need to know how individual letters
+     * are mapped. This separation makes the design easier to test.
+     */
+    const string key =
+        keywordSubstitutionKey("SECURITY");
+
+    SubstitutionCipher cipher(key);
+
+    MessageRouter router;
+
+    router.processMessage(
+        "Node-A",
+        "Transfer the encrypted message after validation.",
+        cipher
+    );
+
+    router.processMessage(
+        "Node-B",
+        "The receiver must decrypt the ciphertext using the same key.",
+        cipher
+    );
+
+    router.processMessage(
+        "Node-C",
+        "Punctuation, spaces, and letter case are preserved.",
+        cipher
+    );
+
+    router.printReport();
+
+    cout << "Messages processed: "
+         << router.size()
+         << '\n';
+}
+
+void demonstrateLargeWorkload() {
+    cout << "\n10. PERFORMANCE AND SCALABILITY\n";
+    cout << string(78, '=') << '\n';
+
+    const string key =
+        keywordSubstitutionKey("PERFORMANCE");
+
+    SubstitutionCipher cipher(key);
+
+    const string largeMessage =
+        makeLargeMessage(100000);
+
+    auto start = chrono::high_resolution_clock::now();
+
+    const string ciphertext =
+        cipher.encrypt(largeMessage);
+
+    const string recovered =
+        cipher.decrypt(ciphertext);
+
+    auto end = chrono::high_resolution_clock::now();
+
+    double milliseconds =
+        chrono::duration<double, milli>(
+            end - start
+        ).count();
+
+    cout << "Input characters: "
+         << largeMessage.size()
+         << '\n';
+
+    cout << "Processing time: "
+         << fixed
+         << setprecision(3)
+         << milliseconds
+         << " ms\n";
+
+    cout << "Round trip correct: "
+         << boolalpha
+         << (recovered == largeMessage)
+         << '\n';
+
+    /*
+     * For a fixed 26-character alphabet:
+     *
+     * Encryption: O(n)
+     * Decryption: O(n)
+     * Frequency analysis: O(n)
+     * Caesar brute force: O(26n), effectively O(n) for this alphabet
+     *
+     * Memory:
+     * Output storage is O(n), while the substitution map itself is O(26).
+     */
+}
+
+void demonstrateKeyProperties() {
+    cout << "\n11. KEY STRUCTURE AND MATHEMATICAL PROPERTIES\n";
+    cout << string(78, '=') << '\n';
+
+    cout << "Valid affine multipliers modulo 26:\n";
+
+    for (int a = 0; a < 26; ++a) {
+        if (gcd(a, 26) == 1) {
+            cout << a << ' ';
+        }
+    }
+
+    cout << "\n\nModular inverse examples:\n";
+
+    for (int value : {1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25}) {
+        auto inverse = modularInverse(value, 26);
+
+        if (inverse.has_value()) {
+            cout << value
+                 << "^-1 mod 26 = "
+                 << *inverse
+                 << '\n';
+        }
+    }
+}
+
+void runSelfTests() {
+    cout << "\n12. SELF-TESTS\n";
+    cout << string(78, '=') << '\n';
+
+    {
+        string text = "ABC XYZ";
+        string encrypted = caesarEncrypt(text, 3);
+        string recovered = caesarDecrypt(encrypted, 3);
+
+        if (encrypted != "DEF ABC" || recovered != text) {
+            throw runtime_error("Caesar self-test failed.");
+        }
+    }
+
+    {
+        const string key =
+            "QWERTYUIOPASDFGHJKLZXCVBNM";
+
+        SubstitutionCipher cipher(key);
+
+        string text = "Testing substitution!";
+        string encrypted = cipher.encrypt(text);
+        string recovered = cipher.decrypt(encrypted);
+
+        if (recovered != text) {
+            throw runtime_error(
+                "Substitution self-test failed."
+            );
+        }
+    }
+
+    {
+        string text = "Atbash is self inverse.";
+        if (atbash(atbash(text)) != text) {
+            throw runtime_error(
+                "Atbash self-test failed."
+            );
+        }
+    }
+
+    {
+        string text = "Affine test.";
+        string encrypted =
+            affineEncrypt(text, 5, 8);
+
+        string recovered =
+            affineDecrypt(encrypted, 5, 8);
+
+        if (recovered != text) {
+            throw runtime_error(
+                "Affine self-test failed."
+            );
+        }
+    }
+
+    if (gcd(5, 26) != 1) {
+        throw runtime_error("GCD self-test failed.");
+    }
+
+    if (!modularInverse(5, 26).has_value()
+        || *modularInverse(5, 26) != 21) {
+        throw runtime_error(
+            "Modular inverse self-test failed."
+        );
+    }
+
+    cout << "All C++ self-tests passed.\n";
+}
+
+} // namespace crypto
+
+int main() {
+    using namespace crypto;
+
+    try {
+        cout << "SUBSTITUTION CIPHERS: C++ TECHNICAL CASE STUDY\n";
+        cout << "Alphabet: " << ALPHABET << "\n";
+
+        testCaesar();
+        testGeneralSubstitution();
+        testAffine();
+        testAtbash();
+        testKeywordSubstitution();
+        testCryptanalysis();
+        testFrequencyAnalysis();
+        demonstrateFailureConditions();
+        demonstrateMessageRouter();
+        demonstrateLargeWorkload();
+        demonstrateKeyProperties();
+        runSelfTests();
+
+        cout << "\n13. SECURITY DESIGN OBSERVATIONS\n";
+        cout << string(78, '=') << '\n';
+
+        cout
+            << "Classical substitution provides deterministic symbol mapping "
+            << "rather than modern semantic security.\n";
+
+        cout
+            << "A monoalphabetic substitution preserves symbol frequencies, "
+            << "repeated-letter structure, and many language-level patterns.\n";
+
+        cout
+            << "A large permutation key space does not eliminate these "
+            << "statistical weaknesses.\n";
+
+        cout
+            << "For real confidentiality, authenticated modern cryptographic "
+            << "algorithms should replace classical substitution mechanisms.\n";
+
+        cout << "\nProgram completed successfully.\n";
+    }
+    catch (const exception& error) {
+        cerr << "\nFatal error: "
+             << error.what()
+             << '\n';
+
+        return 1;
+    }
+
+    return 0;
+}
