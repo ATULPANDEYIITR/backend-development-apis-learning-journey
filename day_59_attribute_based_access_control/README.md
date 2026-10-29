@@ -1,492 +1,843 @@
-For the topic specified at the end, generate exactly SIX independent deliverables:
-
-1. Complete Python script
-2. Complete JavaScript file
-3. Complete C++17 program
-4. Complete Java 17 program
-5. Complete PostgreSQL SQL script
-6. Complete Markdown README.md
-
-# STRICT OUTPUT FORMAT
-
-Output exactly six fenced code blocks and nothing else.
-
-The six blocks MUST appear in exactly this order:
-
-1. Python
-2. JavaScript
-3. C++17
-4. Java 17
-5. PostgreSQL
-6. Markdown README.md
-
-Use exactly these fence types:
-
-- First block: `python`
-- Second block: `javascript`
-- Third block: `cpp`
-- Fourth block: `java`
-- Fifth block: `sql`
-- Sixth block: `markdown`
-
-Each block must contain the complete contents of its corresponding file.
-
-IMPORTANT: Do not output example placeholders.
-
-There must be:
-- Exactly six fenced code blocks.
-- Exactly one block per deliverable.
-- No text before the first block.
-- No text between blocks.
-- No text after the sixth block.
-- No additional or fragmented blocks.
-- No nested triple backticks inside any block.
-- No filenames, labels, introductions, explanations, conclusions, or commentary outside the six blocks.
-
-The sixth block is the complete README.md file. ALL Markdown content must remain inside that single final Markdown block.
-
-The README MUST NOT contain any fenced code blocks. Never use triple backticks anywhere inside the README. Use inline code with single backticks, Markdown tables, headings, bullets, paragraphs, and plain-text diagrams where needed.
-
-# GENERAL CONTENT RULES
-
-All six deliverables must be complete, technically accurate, directly relevant, and usable.
-
-If the topic contains multiple categories, keep them technically distinct. Do not repeat the same explanation across categories.
-
-Depth must come from:
-- Actual implementations.
-- Realistic workflows.
-- Algorithms.
-- Data structures.
-- Validation.
-- State management.
-- Database operations.
-- Security controls.
-- Edge cases.
-- Failure handling.
-- Performance considerations.
-- Concrete design decisions.
-
-Do not use:
-- Placeholders.
-- TODOs.
-- Pseudocode.
-- Unfinished logic.
-- Generic tutorials.
-- Unrelated examples.
-- Filler.
-- Repetitive headings.
-- Shallow numbered lists.
-- Motivational language.
-- Exaggerated claims.
-- Meta-commentary.
-
-Do not mention ChatGPT, AI, language models, prompts, generation, or the creation process.
-
-Do not use these phrases:
-- "Let's dive in"
-- "Welcome to"
-- "By the end of this"
-- "Furthermore"
-- "Moreover"
-- "In addition"
-- "Overall"
+# Attribute-Based Access Control: Policies, Attributes, and Contextual Authorization
+
+## Scope
+
+This project models Attribute-Based Access Control (ABAC) as a policy-driven authorization system. Authorization decisions are derived from attributes of the subject, resource, requested action, and request context rather than from a single role lookup.
+
+The implementation treats four authorization dimensions separately:
+
+| Dimension | Meaning |
+|---|---|
+| Subject attributes | Identity, department, roles, clearance, and account state |
+| Resource attributes | Resource type, owner department, and classification |
+| Action attributes | Requested operation such as `read`, `write`, or `delete` |
+| Contextual attributes | Device trust, MFA status, IP address, country, environment, and emergency ticket |
+
+The central model is:
+
+`Subject + Resource + Action + Context + Policy Set -> Authorization Decision`
+
+The default security posture is deny. An access request must satisfy an applicable allow policy and must not be blocked by a higher-priority or explicit deny condition.
+
+## ABAC Domain Model
+
+The repository implementations use a common conceptual model while emphasizing different engineering concerns.
+
+```text
+User
+  |
+  +-- identity attributes
+  +-- department
+  +-- roles
+  +-- clearance
+  +-- account status
+          |
+          v
+Access Request
+  |
+  +-- Action
+  +-- Resource
+  +-- Request Context
+          |
+          +-- IP address
+          +-- trusted device
+          +-- MFA
+          +-- country
+          +-- environment
+          +-- emergency ticket
+          |
+          v
+Policy Evaluation
+  |
+  +-- attribute conditions
+  +-- policy effect
+  +-- priority
+  +-- enabled state
+          |
+          v
+Authorization Decision
+  |
+  +-- allow
+  +-- deny
+  +-- audit event
+```
+
+A role is only one attribute. ABAC does not require every decision to be role-based. A policy can combine a role with classification, device state, MFA, network location, or another contextual attribute.
+
+## Policy Semantics
+
+Each policy contains:
+
+| Element | Purpose |
+|---|---|
+| Policy identifier | Stable reference for audit and administration |
+| Effect | `allow` or `deny` |
+| Priority | Determines precedence among applicable policies |
+| Actions | Operations covered by the policy |
+| Resource types | Resource categories covered by the policy |
+| Conditions | Attribute predicates that must all evaluate successfully |
+| Enabled state | Allows policy activation without deleting its definition |
 
-# PYTHON
+The examples use a deny-by-default model.
 
-Create one complete, self-contained Python script that progresses from fundamental to advanced concepts relevant to the topic.
-
-Use Python-specific strengths where appropriate:
-- Functions.
-- Classes.
-- Dictionaries.
-- Lists.
-- Sets.
-- Dataclasses.
-- Enums.
-- Validation.
-- Exceptions.
-- File handling.
-- APIs or automation where relevant.
-- Testing or assertions.
-- Standard-library features.
+A simplified evaluation sequence is:
 
-Use executable implementations instead of excessive explanation.
+```text
+Validate request
+      |
+      v
+Is subject active?
+      |
+      v
+Evaluate applicable policies
+      |
+      +---- explicit deny ----> DENY
+      |
+      +---- no allow ----------> DENY
+      |
+      +---- allow -------------> ALLOW
+```
 
-Comments must explain important mechanisms.
+The Python, JavaScript, and Java implementations explicitly record the matched policies and decision reason. This makes authorization behavior inspectable instead of reducing the result to an unexplained Boolean value.
 
-Include realistic examples, edge cases, validation, failure conditions, performance considerations, security considerations, debugging information, and production considerations where relevant.
-
-Avoid unnecessary external dependencies.
+## Subject Attributes
 
-The script must run as provided.
+The sample subjects include:
 
-# JAVASCRIPT
+- `analyst`
+- `manager`
+- `administrator`
+- `incident_responder`
+- department membership
+- clearance level
+- active or inactive account state
 
-Create one complete, self-contained JavaScript file that complements rather than mechanically translates the Python implementation.
+Clearance is modeled independently from role membership. A manager can possess the required role but still fail an authorization request if the requested resource is classified above the user's clearance.
 
-Use JavaScript-specific capabilities where relevant:
-- Objects.
-- Classes.
-- Maps and Sets.
-- Asynchronous processing.
-- Promises.
-- Event-driven behavior.
-- Validation.
-- Policy evaluation.
-- Structured data processing.
-- Node.js standard-library functionality where appropriate.
-
-Progress from basic topic-specific behavior into a realistic implementation.
-
-Include meaningful validation, error handling, edge cases, performance considerations, and security considerations where applicable.
-
-Use meaningful names and comments.
-
-Avoid unnecessary npm dependencies.
-
-The file must be executable in an appropriate JavaScript runtime.
-
-# C++17
-
-Create one complete C++17 program as a realistic technical case study specifically related to the topic.
-
-Use a coherent, non-trivial scenario rather than isolated syntax examples.
-
-Use appropriate:
-- Classes.
-- Structs.
-- Enums.
-- Functions.
-- STL containers.
-- Algorithms.
-- Validation.
-- Exception handling.
-- Input/output.
-- Modular design.
+The distinction is important because authentication identifies a subject while authorization evaluates whether that subject is permitted to perform a particular operation against a particular resource under current conditions.
 
-The C++ implementation should provide a substantially different engineering perspective from Python and JavaScript where practical.
+## Resource Attributes
 
-Comments must explain important architectural and implementation decisions.
+Resources contain:
 
-Include applicable:
-- Edge cases.
-- Constraints.
-- Trade-offs.
-- Complexity.
-- Performance.
-- Security considerations.
-- Failure conditions.
+- identifier
+- resource type
+- owner department
+- classification level
+- active state in the database model
 
-The program must compile with C++17 or later.
+The examples include ordinary reports, confidential reports, and production databases.
 
-Do not use unnecessary external libraries.
+Classification is deliberately treated as a resource attribute rather than a property of a role. This allows the same user to receive different decisions for different resources.
 
-Do not use placeholders or pseudocode.
+For example:
 
-# JAVA 17
+```text
+User clearance = 4
 
-Create one complete Java 17 program using a realistic enterprise-oriented scenario related to the topic.
+Report classification = 2
+Result = potentially allowed
 
-The implementation must complement the other languages rather than simply translate them.
+Report classification = 4
+Result = potentially allowed when policy conditions pass
 
-Use Java-specific features where appropriate:
-- Classes.
-- Interfaces.
-- Enums.
-- Records.
-- Collections.
-- Streams.
-- Generics.
-- Immutable structures.
-- Validation.
-- Custom exceptions.
-- Domain modeling.
-- Explicit state transitions.
-- Service classes.
-- Policy objects.
+Database classification = 5
+Result = denied when clearance is insufficient
+```
 
-Represent domain behavior, policies, workflows, state transitions, and validation explicitly.
+## Contextual Authorization
 
-Include meaningful:
-- Failure states.
-- Validation.
-- Edge cases.
-- Policy conflicts.
-- Security considerations.
-- Performance implications.
-- Design trade-offs.
+Context changes the decision without changing the identity or resource.
 
-The program must compile and run using Java 17 or later with no unnecessary third-party dependencies.
+The examples use:
 
-Do not use placeholders, TODOs, pseudocode, or generic Java tutorials.
+- trusted device status
+- MFA verification
+- source IP address
+- country
+- environment
+- emergency ticket
 
-# POSTGRESQL
+A manager reading a confidential report must satisfy both device-trust and MFA conditions. An incident responder can use an emergency policy only when an emergency ticket follows the expected `INC-######` format.
 
-Create one complete, executable PostgreSQL script representing the topic through a realistic relational model and workflow.
+This illustrates a key ABAC property: authorization can depend on runtime circumstances.
 
-Use topic-specific:
-- Schemas where useful.
-- Tables.
-- Primary keys.
-- Foreign keys.
-- Unique constraints.
-- Check constraints.
-- Indexes.
-- Views.
-- CTEs.
-- Functions.
-- Procedures where appropriate.
-- Triggers.
-- Transactions.
-- Realistic DDL.
-- Realistic DML.
+## Python Implementation
 
-Include sample records covering meaningful states, roles, decisions, policies, valid conditions, and failure cases.
+The Python implementation is a complete in-memory policy engine.
 
-Demonstrate meaningful queries for:
-- Retrieval.
-- Validation.
-- Aggregation.
-- Evaluation.
-- Reporting.
-- Workflow state.
-- Eligibility decisions.
-
-Enforce important database-level rules using constraints and triggers where appropriate.
+### Domain classes
 
-Use indexes only where they provide a clear query-performance benefit.
+The implementation uses dataclasses for:
 
-Demonstrate transactional integrity where relevant.
+- `User`
+- `Resource`
+- `RequestContext`
+- `Condition`
+- `Policy`
+- `AuditEvent`
 
-Use PostgreSQL-specific SQL comments to explain important design decisions.
-
-The script must execute as provided in PostgreSQL.
-
-Do not use placeholders, pseudo-SQL, unfinished definitions, or generic SQL tutorials.
-
-# README.MD
-
-Create one complete, professional README.md explaining the actual technical and educational content implemented in the five source files.
-
-The entire README MUST be contained inside the sixth and final `markdown` block.
-
-The README MUST NOT contain any fenced code blocks or triple backticks.
-
-Use:
-- Descriptive headings.
-- Precise paragraphs.
-- Markdown tables.
-- Useful bullet lists.
-- Plain-text diagrams.
-- Inline code.
-
-Use plain, precise, academic English.
-
-Make every section specific to the topic.
-
-Explain actual:
-- Concepts.
-- Mechanisms.
-- Terminology.
-- Workflows.
-- Rules.
-- Distinctions.
-- Implementation decisions.
-- Edge cases.
-- Limitations.
-- Practical implications.
-
-Describe what each implementation actually does rather than merely saying that it demonstrates the topic.
-
-Explain the actual Python, JavaScript, C++17, Java 17, and PostgreSQL mechanisms used.
-
-Do not duplicate source code.
+Enums represent policy effects and authorization decisions.
 
-Do not create a generic programming-language tutorial.
+The immutable `User`, `Resource`, `RequestContext`, `Condition`, and `Policy` records make policy evaluation predictable. Mutable audit state is maintained separately by `AuthorizationEngine`.
 
-Do not include sections titled:
-- Summary.
-- Next Steps.
-- Further Learning.
-- Recommendations.
-- Resources.
-- Conclusion.
+### Attribute resolution
 
-Do not recommend books, websites, courses, videos, tools, or unrelated projects.
+Attributes are addressed through paths such as:
 
-Do not create a repetitive conclusion.
+- `user.roles`
+- `user.department`
+- `resource.classification`
+- `request.device_trusted`
+- `request.mfa_verified`
 
-# TOPIC-SPECIFIC REQUIREMENTS
+The resolver separates the policy representation from the Python object layout and rejects missing attributes instead of silently treating them as authorized.
 
-Treat the following four areas as related but distinct.
+### Operators
 
-## PULL REQUESTS
+The Python condition evaluator implements:
 
-Cover:
-- Pull Request lifecycle and mechanics.
-- Source and target branches.
-- Changesets and commits.
-- Review requests.
-- Conversations.
-- Status checks.
-- Merge behavior and strategies.
-- Draft Pull Requests.
-- Base-branch synchronization.
-- Merge conflicts.
-- Reopening Pull Requests.
-- Closing Pull Requests.
+- equality
+- inequality
+- membership
+- containment
+- greater-than-or-equal
+- less-than-or-equal
+- regular-expression matching
+- CIDR membership
 
-## CODE REVIEW
+CIDR evaluation uses the standard library `ipaddress` module. This avoids external networking dependencies.
 
-Cover:
-- Review mechanics.
-- Inline comments.
-- Review states.
-- Review discussions.
-- Requested changes.
-- Approval behavior.
-- Reviewer responsibilities.
-- Review quality and scope.
-- Review criteria.
-- Review workflows.
-- Resolving discussions.
-- Review-related failure modes.
+### Validation
 
-## APPROVALS
+The engine validates:
 
-Cover:
-- Approval semantics.
-- Eligible reviewers.
-- Required reviews.
-- Approval requirements.
-- Stale approvals.
-- Dismissed approvals.
-- Review policies.
-- Reviewer eligibility.
-- Effect of approvals on merge eligibility.
+- IP address syntax
+- action presence
+- user identifier
+- resource identifier
+- hour range
+- active account state
 
-## BRANCH PROTECTION
+Invalid requests raise explicit exceptions rather than becoming authorization successes.
 
-Cover:
-- Protected branches.
-- Required status checks.
-- Required reviews.
-- Direct-push restrictions.
-- Force-push restrictions.
-- Branch deletion restrictions.
-- Conversation requirements.
-- Linear-history requirements where applicable.
-- Merge restrictions.
-- Administrator behavior where applicable.
-- Bypass mechanisms where applicable.
-- Repository governance.
+### Audit trail
 
-Do NOT treat these four areas as interchangeable.
-
-Explain their relationship clearly:
-
-- A Pull Request provides the workflow for proposing changes.
-- Code Review evaluates those changes.
-- Approvals represent review decisions.
-- Branch Protection enforces repository-level conditions before merging.
+Every authorization result is converted into an `AuditEvent`.
 
-Do not repeat Pull Request material under Code Review.
+An event records:
 
-Do not repeat Code Review material under Approvals.
+- timestamp
+- user
+- resource
+- action
+- decision
+- matched policies
+- decision reason
 
-Do not repeat Approval material under Branch Protection.
+This separates authorization from auditing while allowing the same service to produce both results.
 
-When concepts overlap, explain the relationship instead of duplicating the same material.
+### Edge cases
 
-Use realistic repository-development scenarios.
+The Python examples include:
 
-# IMPLEMENTATION PERSPECTIVES
+- inactive users
+- invalid IP addresses
+- insufficient policy matches
+- malformed emergency tickets
+- restricted resources
+- untrusted devices
+- MFA requirements
+- explicit deny policies
 
-## Python
+The default-deny behavior prevents an absent policy from becoming accidental access.
 
-Model and simulate repository workflow behavior.
+## JavaScript Implementation
 
-## JavaScript
+The JavaScript implementation emphasizes an event-driven authorization service.
 
-Provide a complementary interactive, event-driven, or policy-evaluation model.
+### Policy representation
 
-## C++17
+`Policy` objects contain:
 
-Implement a repository governance and merge-eligibility engine evaluating Pull Requests, reviews, approvals, status checks, protected branches, and merge conditions.
+- effect
+- priority
+- action set
+- resource-type set
+- condition functions
 
-## Java 17
+JavaScript `Set` objects provide efficient membership checks for roles, actions, and resource types.
 
-Implement an enterprise repository-governance model with explicit domain types, review policies, approval rules, state transitions, validation, and merge-eligibility services.
+### Functional conditions
 
-## PostgreSQL
+Conditions are represented as functions. The implementation includes reusable predicates for:
 
-Model repositories, branches, Pull Requests, commits, reviewers, reviews, review comments, status checks, branch-protection policies, approval requirements, and merge eligibility.
+- equality
+- collection membership
+- numeric comparison
+- regular expressions
+- CIDR checks
 
-# REALISTIC DOMAIN RELATIONSHIP
+This allows policy composition without introducing a dependency-heavy rule engine.
 
-Use a realistic domain model such as:
+### Event-driven auditing
 
-Repository
-→ Branches
-→ Commits
-→ Pull Requests
-→ Reviews
-→ Review Comments
-→ Conversations
-→ Status Checks
-→ Branch Protection Policies
-→ Approval Requirements
-→ Merge Eligibility
-→ Merge
+`AuthorizationEngine` extends Node.js `EventEmitter`.
 
-Clearly distinguish:
-- Proposed changes.
-- Branch state.
-- Review decisions.
-- Approval decisions.
-- Automated status checks.
-- Repository-level enforcement.
-- Final merge eligibility.
+After every decision, the service emits `authorizationDecision`. The audit subscriber receives the structured decision record without coupling the authorization algorithm directly to a particular logging destination.
 
-# QUALITY STANDARD
+This design can be extended to a file logger, centralized event stream, metrics collector, or security monitoring service without changing policy evaluation.
 
-The six deliverables must function as deliberately designed technical learning artifacts.
+### Asynchronous service boundary
 
-Quality must come from:
-- Actual technical implementations.
-- Accurate terminology.
-- Realistic repository scenarios.
-- Executable behavior.
-- Meaningful edge cases.
-- Clear distinctions between concepts.
-- Relationships between mechanisms.
-- Concrete design decisions.
-- Correct performance considerations.
-- Correct security considerations.
-- Realistic failure handling.
-- Meaningful validation.
+`authorize()` is asynchronous even though the sample policies are in memory. This represents a useful service boundary for production systems where policy evaluation may require asynchronous reads from a policy store, identity provider, cache, or external authorization service.
 
-Do not increase length through repetitive headings, shallow bullets, generic explanations, duplicated concepts, or artificial complexity.
+### Security handling
 
-# FINAL INTERNAL VALIDATION
+The implementation validates IPv4 input before CIDR evaluation and rejects malformed requests. It does not infer authorization from unvalidated user-controlled strings.
 
-Before producing the response, verify internally that:
-- Exactly six fenced code blocks exist.
-- The order is Python, JavaScript, C++17, Java 17, PostgreSQL, Markdown.
-- There is no text outside the six blocks.
-- Each deliverable is contained in exactly one block.
-- The README is entirely inside the sixth block.
-- The README contains no triple backticks.
-- There are no nested fenced blocks.
-- No deliverable is split across multiple blocks.
-- All five source files are complete and executable.
-- The README accurately describes the five implementations.
-- No placeholders or TODOs exist.
-- No meta-commentary exists.
-- The four topic areas remain technically distinct.
-- The output can be copied directly into six separate files.
+The emergency ticket condition uses an anchored regular expression:
 
-# TOPIC
+`^INC-[0-9]{6}$`
 
-Attribute-Based Access Control (ABAC): policies, attributes, contextual authorization.
+This prevents a partial match from satisfying the emergency-access condition.
+
+## C++17 Governance Engine
+
+The C++17 implementation takes a different perspective. It models a repository governance and merge-eligibility engine rather than implementing a direct policy interpreter.
+
+The domain includes:
+
+- users
+- Pull Requests
+- branches
+- branch protection
+- reviews
+- review states
+- status checks
+- merge eligibility
+
+This makes repository governance a concrete policy-evaluation scenario.
+
+### Merge eligibility
+
+The engine evaluates:
+
+1. Pull Request state
+2. draft status
+3. merge-conflict state
+4. target-branch protection
+5. unresolved conversations
+6. required status checks
+7. current approvals
+8. reviewer eligibility
+9. stale approvals
+
+A protected branch requires all configured conditions to pass.
+
+```text
+Pull Request
+      |
+      +-- open?
+      |
+      +-- not draft?
+      |
+      +-- mergeable?
+      |
+      v
+Protected target?
+      |
+      +-- no --> eligible
+      |
+      +-- yes
+           |
+           +-- conversations resolved?
+           +-- required checks passing?
+           +-- required approvals?
+                    |
+                    v
+                eligible
+```
+
+### Reviewer eligibility
+
+The engine rejects:
+
+- inactive reviewers
+- unknown reviewers
+- Pull Request authors attempting to count as independent approvers
+
+Approvals are counted uniquely by reviewer identity. Repeated approvals from the same reviewer cannot artificially increase the approval count.
+
+### Stale approvals
+
+A stale approval does not count toward the required approval total. This represents a common governance requirement where changes after a review can invalidate the assumptions behind a previous approval.
+
+### Branch protection
+
+The `BranchProtection` structure contains:
+
+- target branch
+- required approval count
+- required status checks
+- direct-push restriction
+- force-push restriction
+- conversation-resolution requirement
+- linear-history requirement
+
+The example focuses on merge eligibility rather than implementing a Git transport protocol. This keeps repository policy enforcement distinct from source-control mechanics.
+
+## Java 17 Enterprise Model
+
+The Java implementation models ABAC as an enterprise service layer.
+
+### Domain types
+
+Java records provide immutable domain representations for:
+
+- `User`
+- `Resource`
+- `AccessContext`
+- `Policy`
+- `AuthorizationDecision`
+
+The records validate their own fundamental invariants.
+
+### Policy repository
+
+`PolicyRepository` is an interface separating policy storage from authorization logic.
+
+`InMemoryPolicyRepository` provides the executable sample implementation.
+
+A production implementation could replace this repository with a database-backed or configuration-backed implementation without changing the authorization service contract.
+
+### Predicate-based policies
+
+Java's `Predicate<AccessContext>` represents policy conditions.
+
+The implementation provides reusable predicates for:
+
+- role membership
+- department
+- resource classification
+- trusted devices
+- MFA
+- environment
+- emergency tickets
+
+A policy is therefore a collection of typed predicates combined through `allMatch`.
+
+### Explicit failure types
+
+`AuthorizationException` represents authorization and validation failures.
+
+`PolicyConflictException` represents a policy-definition conflict where multiple highest-priority allow policies exist at the same priority in the sample engine.
+
+Separating these failure types helps distinguish invalid authorization state from an ordinary deny result.
+
+### Audit model
+
+`AuthorizationDecision` records:
+
+- decision timestamp
+- subject
+- resource
+- action
+- decision
+- matched policy identifiers
+- reason
+
+The service exposes an immutable copy of its audit trail, preventing callers from mutating internal decision history.
+
+## PostgreSQL Relational Model
+
+The PostgreSQL implementation represents ABAC and repository governance as relational data.
+
+### Core authorization tables
+
+| Table | Responsibility |
+|---|---|
+| `users` | Subject identity and clearance |
+| `roles` | Role definitions |
+| `user_roles` | Subject-to-role relationships |
+| `resources` | Protected objects and classifications |
+| `actions` | Authorized operations |
+| `policies` | Policy effects and priorities |
+| `policy_actions` | Operations covered by policies |
+| `policy_conditions` | Attribute predicates |
+| `authorization_requests` | Incoming authorization requests |
+| `authorization_decisions` | Decision and reason |
+| `policy_decision_matches` | Policies associated with decisions |
+
+This structure separates policy definitions from requests and decisions.
+
+### Repository governance tables
+
+The same database also models:
+
+- repositories
+- branches
+- branch protection policies
+- commits
+- Pull Requests
+- Pull Request commits
+- reviewers
+- reviews
+- review comments
+- status checks
+- required status checks
+
+This allows merge eligibility to be evaluated from persistent repository state.
+
+### Database constraints
+
+The schema uses:
+
+- primary keys
+- foreign keys
+- unique constraints
+- enum types
+- check constraints
+- cascading deletes
+- indexes
+
+Important rules are enforced at the database layer instead of relying exclusively on application code.
+
+For example, an approval from the Pull Request author is rejected by `prevent_invalid_review()`.
+
+### Indexing
+
+Indexes target common lookup paths:
+
+- user-role relationships
+- resource type and classification
+- enabled policies ordered by priority
+- Pull Request review state
+- status-check state
+- authorization requests by user and time
+
+The schema avoids indiscriminately indexing every column because indexes impose storage and write-maintenance costs.
+
+## Transactional Authorization Recording
+
+The SQL script demonstrates an atomic authorization audit transaction.
+
+The transaction inserts an authorization request and its corresponding decision as one unit.
+
+```text
+BEGIN
+  |
+  +-- insert authorization request
+  |
+  +-- insert authorization decision
+  |
+COMMIT
+```
+
+If either operation fails, the transaction can be rolled back so that the audit trail does not contain an incomplete request or decision.
+
+## Policy Evaluation in PostgreSQL
+
+`evaluate_authorization()` demonstrates database-side authorization evaluation.
+
+The function:
+
+1. validates the user
+2. validates the resource
+3. validates the requested action
+4. rejects inactive users
+5. checks clearance
+6. finds enabled policies
+7. evaluates policy conditions
+8. returns a decision
+9. returns matched policy identifiers
+
+The database therefore contains both policy data and executable decision logic.
+
+For larger systems, application-side policy evaluation and database-side enforcement can be combined. Database constraints should remain responsible for invariants that must hold regardless of which application accesses the database.
+
+## Security Model
+
+The implementations use several security principles.
+
+### Default deny
+
+No matching allow policy results in denial.
+
+This avoids treating missing policy configuration as permission.
+
+### Explicit deny
+
+A deny policy can override otherwise applicable access.
+
+This is useful for conditions such as:
+
+- restricted resources
+- untrusted devices
+- emergency situations that require stronger controls
+- temporary security restrictions
+
+### Least privilege
+
+Policies grant specific operations against specific resource types under explicit conditions.
+
+A user does not automatically receive every operation merely because a role is present.
+
+### Context validation
+
+Contextual attributes are validated before use.
+
+Examples include:
+
+- IP address syntax
+- MFA state
+- device trust
+- environment
+- emergency ticket format
+
+### Auditability
+
+Decisions include the reason and applicable policy identifiers. This supports investigation and policy debugging.
+
+## Policy Conflict Handling
+
+Policy conflicts require deterministic semantics.
+
+The sample implementations use:
+
+- explicit deny handling
+- policy priority
+- default deny
+- conflict detection in selected cases
+
+A production policy engine should document precedence rules before policies are deployed.
+
+Potential precedence models include:
+
+```text
+Explicit deny
+    >
+Higher priority
+    >
+Specific policy
+    >
+General policy
+    >
+Default deny
+```
+
+The exact ordering is a governance decision and must remain consistent across services.
+
+## Failure Modes
+
+Important failure conditions represented in the implementations include:
+
+| Failure | Result |
+|---|---|
+| Unknown user | Deny or validation failure |
+| Inactive user | Deny |
+| Unknown resource | Deny |
+| Invalid action | Validation failure |
+| Insufficient clearance | Deny |
+| Missing MFA | No matching privileged policy |
+| Untrusted device | Potential explicit deny |
+| Invalid emergency ticket | No emergency authorization |
+| Missing status check | Merge ineligible |
+| Failed status check | Merge ineligible |
+| Stale approval | Approval does not count |
+| Inactive reviewer | Approval does not count |
+| Self-approval | Rejected |
+| Merge conflict | Merge ineligible |
+| Draft Pull Request | Merge ineligible |
+| Unresolved conversation | Merge ineligible on protected branch |
+
+## Performance Considerations
+
+Policy evaluation has two major costs:
+
+1. finding applicable policies
+2. evaluating their conditions
+
+For an in-memory engine, policies can be indexed by action and resource type before condition evaluation.
+
+For database-backed evaluation, indexes on policy activation, priority, action relationships, and frequently queried attributes reduce unnecessary scans.
+
+Authorization decisions should not repeatedly perform expensive identity or policy lookups when the relevant information can safely be cached. Cache invalidation must be tied to policy and identity changes so that revoked permissions do not remain active longer than the security requirements allow.
+
+Audit records can grow quickly. Production systems should therefore partition or archive audit data according to retention requirements while preserving sufficient information for security investigations.
+
+## Pull Request, Code Review, Approvals, and Branch Protection
+
+These repository concepts are related but represent different control layers.
+
+### Pull Requests
+
+A Pull Request is the workflow for proposing a set of changes from a source branch toward a target branch.
+
+The domain represented in the C++ and PostgreSQL implementations includes:
+
+- source branch
+- target branch
+- commits
+- author
+- draft state
+- open or closed state
+- mergeability
+- conversations
+- final merge eligibility
+
+A Pull Request describes the proposed change and its lifecycle. It does not itself constitute an approval.
+
+### Code Review
+
+Code Review evaluates the proposed changes.
+
+The data model represents:
+
+- reviewer identity
+- review state
+- comments
+- comment resolution
+- reviewer eligibility
+- stale reviews
+
+Review comments can identify a problem without granting approval. A review can also request changes.
+
+Review quality depends on the reviewer evaluating the relevant behavior, security implications, correctness, maintainability, and scope rather than merely producing an approval count.
+
+### Approvals
+
+An approval is a review decision indicating that a reviewer accepts the current state under the applicable review policy.
+
+The model distinguishes current approvals from stale approvals.
+
+Approval eligibility can depend on:
+
+- active reviewer status
+- reviewer identity
+- independence from the author
+- review state
+- review freshness
+- repository policy
+
+Two approvals from the same reviewer do not provide the same independence as approvals from two eligible reviewers, so the examples count distinct reviewers.
+
+### Branch Protection
+
+Branch protection is repository-level enforcement.
+
+It can require:
+
+- minimum approvals
+- passing status checks
+- resolved conversations
+- restricted direct pushes
+- restricted force pushes
+- linear history
+
+Branch protection does not replace review. It enforces conditions after the review and automated-check state has been evaluated.
+
+The relationship is:
+
+```text
+Pull Request
+    |
+    | proposes changes
+    v
+Code Review
+    |
+    | evaluates changes
+    v
+Approvals
+    |
+    | records review decisions
+    v
+Branch Protection
+    |
+    | enforces repository conditions
+    v
+Merge Eligibility
+    |
+    v
+Merge
+```
+
+Keeping these layers distinct prevents a passing status check from being mistaken for a human approval and prevents an approval from being mistaken for permission to bypass branch protection.
+
+## Implementation Comparison
+
+| Implementation | Primary perspective | Important mechanism |
+|---|---|---|
+| Python | Policy simulation | Dataclasses, attribute resolution, condition evaluation, audit events |
+| JavaScript | Event-driven authorization | `EventEmitter`, predicates, asynchronous service boundary |
+| C++17 | Governance engine | Explicit merge-eligibility domain model and STL-based evaluation |
+| Java 17 | Enterprise authorization service | Records, interfaces, predicates, repository abstraction, explicit exceptions |
+| PostgreSQL | Persistent authorization and governance | Relational schema, constraints, triggers, functions, views, transactions |
+
+## Practical Workflow
+
+A request entering an ABAC system can follow this sequence:
+
+```text
+1. Authenticate subject
+        |
+2. Collect subject attributes
+        |
+3. Identify resource
+        |
+4. Identify requested action
+        |
+5. Collect contextual attributes
+        |
+6. Validate request attributes
+        |
+7. Select applicable policies
+        |
+8. Evaluate conditions
+        |
+9. Apply policy precedence
+        |
+10. Produce allow or deny
+        |
+11. Record audit event
+```
+
+The same structure can be applied to application APIs, administrative operations, data services, internal platforms, and repository governance.
+
+## Limitations
+
+The examples intentionally use deterministic in-memory policies or a compact relational policy representation.
+
+A production authorization platform may require additional controls such as:
+
+- policy versioning
+- policy lifecycle approval
+- distributed policy caching
+- identity-provider integration
+- attribute freshness guarantees
+- revocation propagation
+- centralized audit storage
+- tamper-resistant audit records
+- policy simulation before deployment
+- administrative separation of duties
+- formal policy testing
+- high-availability policy distribution
+
+The sample systems provide the core decision model without assuming a particular identity provider, cloud platform, source-control vendor, or deployment architecture.
+
+## Key Distinctions
+
+The central distinctions implemented throughout the project are:
+
+| Concept | Question answered |
+|---|---|
+| Subject attributes | Who is requesting access and what properties does the subject have? |
+| Resource attributes | What is being accessed and how sensitive is it? |
+| Action | What operation is being requested? |
+| Context | Under what circumstances is the request occurring? |
+| Policy | What conditions determine the decision? |
+| Review | What did a human reviewer decide about proposed changes? |
+| Approval | Does an eligible reviewer approve the current change state? |
+| Branch protection | What repository-level conditions must hold before merging? |
+| Authorization decision | Is the requested operation permitted under the active policy set? |
+| Audit event | What decision was made, why, and which policies contributed? |
